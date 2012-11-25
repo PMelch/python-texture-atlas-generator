@@ -73,8 +73,9 @@ class Node(object):
 
     def render(self, image):
         if self.texture:
-            size = self.texture.size
-            image.paste(self.texture, (self.rect.x, self.rect.y))
+            thisimage = Image.open(self.texture)
+            size = thisimage.size
+            image.paste(thisimage, (self.rect.x, self.rect.y))
         
         if self.children:
             self.children[0].render(image)
@@ -95,43 +96,57 @@ class Generator(object):
         self._root_folder = root_folder
         self._groups = dict()
         for folder, _, filenames in os.walk(root_folder):
-            filenames = [os.path.join(folder, fn) for fn in filenames if os.path.splitext(os.path.join(folder, fn))[1].lower() in Generator.IMAGE_TYPES]
+            filenames = [os.path.join(os.path.relpath(folder, self._root_folder), fn) for fn in filenames if os.path.splitext(os.path.join(folder, fn))[1].lower() in Generator.IMAGE_TYPES]
             if filenames:
                 self._groups[folder] = filenames
             
-    def create(self, texSize):
+    def create(self, texSize, outfolder):
         
-        for group, images in self._groups.items():
-            self._root = Node(0,0,texSize, texSize)
-            
+        for group, images in self._groups.items():            
             atlas_number = 0
-            for imagepath in images:
-                image = Image.open(imagepath)
-                size = image.size
-                print image.size
-                node = self._root.insert(image)
-                if node:
-                    node.texture = image
-                else:
-                    print "cannot fit in",imagepath
-                    
-            
-            image = Image.new("RGBA", (2048, 2048))
-            self._root.render(image)
-            image.save(os.path.join(group, "atlas%02d.png"%atlas_number), optimize=True)
+            images_scheduled = images            
+            while True:
+                self._root = Node(0,0,texSize, texSize)
+                next_scheduled = []
+                print "group",group
+                print "pass:",(atlas_number+1)
+                for imagepath in images_scheduled:
+                    image = Image.open(os.path.join(self._root_folder, imagepath))
+                    size = image.size
+                    node = self._root.insert(image)
+                    if node:
+                        node.texture = os.path.join(self._root_folder, imagepath)
+                    else:
+                        next_scheduled.append(imagepath)
+                        
+                if images_scheduled == next_scheduled:
+                    for imagepath in images_scheduled:
+                        print "cannot fit in",imagepath
+                    break
+                                                
+                image = Image.new("RGBA", (texSize, texSize))
+                self._root.render(image)
+                outpath = os.path.join(outfolder, group, "atlas%02d.png" % atlas_number)
+                try:    os.makedirs(os.path.dirname(outpath))
+                except: pass
+                image.save(outpath, optimize=True)
+                
+                images_scheduled = next_scheduled
+                atlas_number += 1
+                
 
 if __name__ == '__main__':
     import optparse
-    parser = optparse.OptionParser(usage="usage: %prog [options] infolder")
+    parser = optparse.OptionParser(usage="usage: %prog [options] infolder outfolder")
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False, help="verbose mode")    
     options, args = parser.parse_args()
     
     try:
-        infolder = args[0]
+        infolder, outfolder = args
     except:
         parser.print_version()
         sys.exit(-1)
 
     g = Generator()
     g.collect(infolder)
-    g.create(2048)
+    g.create(2048, outfolder)
