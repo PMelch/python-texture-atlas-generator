@@ -1,8 +1,26 @@
 '''
 Created on 25.11.2012
 
-@author: peter
+implementation of the texture packing algorithm proposed by Jim Scott in 
+http://www.blackpawn.com/texts/lightmaps/default.html
+
+
+Copyright 2012 Peter Melchart
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+    
+        http://www.apache.org/licenses/LICENSE-2.0
+    
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
 '''
+
 import os
 import sys
 import Image
@@ -16,16 +34,14 @@ class Rect(object):
         self.w = w
         self.h = h
         
-    def matches(self, image):
-        size = image.size
+    def matches(self, size):
         if (self.w==size[0] and self.h==size[1] ):# or \
             #(self.w==size[1] and self.h==size[0] ):
             return True
         return False
         
         
-    def can_contain(self, image):
-        size = image.size
+    def can_contain(self, size):
         if (self.w>=size[0] and self.h>=size[1] ):# or \
         #    (self.w>=size[1] and self.h>=size[0] ):
             return True
@@ -38,38 +54,38 @@ class Node(object):
         self.texture = None
 
     
-    def insert(self, image):
+    def insert(self, size):
         # are we a branch?
         if self.children:
-            newnode = self.children[0].insert(image)
+            newnode = self.children[0].insert(size)
             if newnode:
                 return newnode
-            return self.children[1].insert(image)
+            return self.children[1].insert(size)
         
         # already texture there?
         if self.texture:
             return None
 
         # this node too small?
-        if not self.rect.can_contain(image):
+        if not self.rect.can_contain(size):
             return None
         
-        if self.rect.matches(image):
+        if self.rect.matches(size):
             return self
         
         
-        dw = self.rect.w - image.size[0]
-        dh = self.rect.h - image.size[1]
+        dw = self.rect.w - size[0]
+        dh = self.rect.h - size[1]
         
         r = self.rect
         if dw > dh:
-            self.children = [Node(r.x, r.y, image.size[0], r.h), \
-                             Node(r.x+image.size[0], r.y, r.w-image.size[0], r.h)]
+            self.children = [Node(r.x, r.y, size[0], r.h), \
+                             Node(r.x+size[0], r.y, r.w-size[0], r.h)]
         else:
-            self.children = [Node(r.x, r.y, r.w, image.size[1]), \
-                             Node(r.x, r.y+image.size[1], r.w, r.h-image.size[1])]
+            self.children = [Node(r.x, r.y, r.w, size[1]), \
+                             Node(r.x, r.y+size[1], r.w, r.h-size[1])]
         
-        return self.children[0].insert(image)
+        return self.children[0].insert(size)
 
     def render(self, image):
         if self.texture:
@@ -90,32 +106,43 @@ class Generator(object):
 
 
     def __init__(self):
-        pass
+        self._texture_info = dict()
+        self._atlas_info = dict()
     
     def collect(self, root_folder):
+        self._texture_info = dict()
+        self._atlas_info = dict()
+        
         self._root_folder = root_folder
         self._groups = dict()
         for folder, _, filenames in os.walk(root_folder):
-            filenames = [os.path.join(os.path.relpath(folder, self._root_folder), fn) for fn in filenames if os.path.splitext(os.path.join(folder, fn))[1].lower() in Generator.IMAGE_TYPES]
+            filenames = [os.path.join(folder, fn) for fn in filenames if os.path.splitext(os.path.join(folder, fn))[1].lower() in Generator.IMAGE_TYPES]
             if filenames:
+                for filename in filenames:
+                    image = Image.open(filename)
+                    self._texture_info[filename] = dict(size=image.size)                
                 self._groups[folder] = filenames
             
     def create(self, texSize, outfolder):
-        
+                
         for group, images in self._groups.items():            
-            atlas_number = 0
+            atlas_number = 1
             images_scheduled = images            
             while True:
+                outpath = os.path.join(outfolder, os.path.relpath(group, self._root_folder), "atlas%02d.png" % atlas_number)
+                self._atlas_info[outpath] = list()
+                
                 self._root = Node(0,0,texSize, texSize)
                 next_scheduled = []
                 print "group",group
-                print "pass:",(atlas_number+1)
+                print "pass:",atlas_number
                 for imagepath in images_scheduled:
-                    image = Image.open(os.path.join(self._root_folder, imagepath))
-                    size = image.size
-                    node = self._root.insert(image)
+                    size = self._texture_info[imagepath]["size"]
+                    node = self._root.insert(size)
                     if node:
-                        node.texture = os.path.join(self._root_folder, imagepath)
+                        node.texture = imagepath                     
+                        self._texture_info[imagepath]["atlas"] = outpath
+                        self._atlas_info[outpath].append(dict(path=imagepath, rect=node.rect))
                     else:
                         next_scheduled.append(imagepath)
                         
@@ -126,7 +153,7 @@ class Generator(object):
                                                 
                 image = Image.new("RGBA", (texSize, texSize))
                 self._root.render(image)
-                outpath = os.path.join(outfolder, group, "atlas%02d.png" % atlas_number)
+                
                 try:    os.makedirs(os.path.dirname(outpath))
                 except: pass
                 image.save(outpath, optimize=True)
@@ -149,4 +176,4 @@ if __name__ == '__main__':
 
     g = Generator()
     g.collect(infolder)
-    g.create(2048, outfolder)
+    g.create(1024, outfolder)
