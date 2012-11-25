@@ -130,19 +130,19 @@ class Generator(object):
             images_scheduled = images            
             while True:
                 outpath = os.path.join(outfolder, os.path.relpath(group, self._root_folder), "atlas%02d.png" % atlas_number)
-                self._atlas_info[outpath] = list()
+                self._atlas_info[outpath] = dict()
                 
-                self._root = Node(0,0,texSize, texSize)
+                _root = Node(0,0,texSize, texSize)
                 next_scheduled = []
                 print "group",group
                 print "pass:",atlas_number
                 for imagepath in images_scheduled:
                     size = self._texture_info[imagepath]["size"]
-                    node = self._root.insert(size)
+                    node = _root.insert(size)
                     if node:
                         node.texture = imagepath                     
                         self._texture_info[imagepath]["atlas"] = outpath
-                        self._atlas_info[outpath].append(dict(path=imagepath, rect=node.rect))
+                        self._atlas_info[outpath][imagepath] = dict(rect=node.rect)
                     else:
                         next_scheduled.append(imagepath)
                         
@@ -152,15 +152,26 @@ class Generator(object):
                     break
                                                 
                 image = Image.new("RGBA", (texSize, texSize))
-                self._root.render(image)
+                _root.render(image)
                 
                 try:    os.makedirs(os.path.dirname(outpath))
                 except: pass
                 image.save(outpath, optimize=True)
+                       
+                self.write_info_file(self._atlas_info[outpath], os.path.splitext(outpath)[0]+".info")         
                 
                 images_scheduled = next_scheduled
                 atlas_number += 1
                 
+    def write_info_file(self, info, outpath):
+        with open(outpath, "wt") as outfile:
+            for path, entry in info.items():
+                outfile.write(path)
+                outfile.write(";")
+                rect = entry["rect"]
+                outfile.write("%d;%d;%d;%d;"%(rect.x, rect.y, rect.w, rect.h))
+                outfile.write("\n")
+
 
 if __name__ == '__main__':
     import optparse
