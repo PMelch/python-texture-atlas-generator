@@ -124,7 +124,8 @@ class Generator(object):
                 self._groups[folder] = filenames
             
     def create(self, texSize, outfolder):
-                
+        if self._verbose:
+            print "Creating texture atlases with size:",texSize        
         for group, images in self._groups.items():            
             atlas_number = 1
             images_scheduled = images            
@@ -173,10 +174,14 @@ class Generator(object):
                 outfile.write("\n")
 
 
+    def set_verbose(self, verbose):
+        self._verbose = verbose
+
 if __name__ == '__main__':
     import optparse
     parser = optparse.OptionParser(usage="usage: %prog [options] infolder outfolder")
-    parser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False, help="verbose mode")    
+    parser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False, help="verbose mode")
+    parser.add_option("-t", "--texture", dest="texture_size", action="store", default=1024, type=int, help="texture atlas size")    
     options, args = parser.parse_args()
     
     try:
@@ -186,5 +191,6 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     g = Generator()
+    g.set_verbose(options.verbose)
     g.collect(infolder)
-    g.create(1024, outfolder)
+    g.create(options.texture_size, outfolder)
