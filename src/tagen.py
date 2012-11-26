@@ -120,17 +120,40 @@ class Generator(object):
             if filenames:
                 for filename in filenames:
                     image = Image.open(filename)
-                    self._texture_info[filename] = dict(size=image.size)                
-                self._groups[folder] = filenames
+                    self._texture_info[filename] = dict(size=image.size)
+
+                if self._group_by_folder:
+                    self._groups[folder if self._group_by_folder else ""] = filenames
+                else:
+                    if "" not in self._groups:
+                        self._groups[""]=[]
+                    self._groups[""].extend(filenames)
             
-    def create(self, texSize, outfolder):
+    def _image_sort_func(self, a, b):
+        size1 = self._texture_info[a]["size"]
+        size2 = self._texture_info[b]["size"]
+        val1 = size1[0]*size1[1]
+        val2 = size2[0]*size2[1]
+        return cmp(val1,val2) if self._sort==1 else cmp(val2,val1)
+            
+    def create(self, outfolder):
+        texSize = self._texture_size
+        
         if self._verbose:
             print "Creating texture atlases with size:",texSize        
-        for group, images in self._groups.items():            
-            atlas_number = 1
-            images_scheduled = images            
+        atlas_number = 1
+        for group, images in self._groups.items():                            
+            if self._sort == 0:
+                images_scheduled = images
+            else:
+                images_scheduled = sorted(images, cmp=lambda a,b:self._image_sort_func(a, b))
+                
             while True:
-                outpath = os.path.join(outfolder, os.path.relpath(group, self._root_folder), "atlas%02d.png" % atlas_number)
+                if self._flatten_output or not self._group_by_folder:
+                    outpath = os.path.join(outfolder, "atlas%02d.png" % atlas_number)
+                else:
+                    outpath = os.path.join(outfolder, os.path.relpath(group, self._root_folder), "atlas%02d.png" % atlas_number)
+                    
                 self._atlas_info[outpath] = dict()
                 
                 _root = Node(0,0,texSize, texSize)
@@ -174,14 +197,22 @@ class Generator(object):
                 outfile.write("\n")
 
 
-    def set_verbose(self, verbose):
-        self._verbose = verbose
+    def set_options(self, options):
+        self.__options = options
+        self._verbose = options.verbose
+        self._texture_size = options.texture_size
+        self._flatten_output = options.flat
+        self._group_by_folder = options.group_by_folder
+        self._sort = options.sort
 
 if __name__ == '__main__':
     import optparse
     parser = optparse.OptionParser(usage="usage: %prog [options] infolder outfolder")
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False, help="verbose mode")
-    parser.add_option("-t", "--texture", dest="texture_size", action="store", default=1024, type=int, help="texture atlas size")    
+    parser.add_option("-t", "--texture", dest="texture_size", action="store", default=1024, type=int, help="texture atlas size")
+    parser.add_option("-g", "--group_by_folder", dest="group_by_folder", action="store_true", default=False, help="if specified, create texture atlases per folder. output will also get flattened.")    
+    parser.add_option("-f", "--flat", dest="flat", action="store_true", default=False, help="if specified, the folder structure will NOT be re-created in the output folder.")    
+    parser.add_option("-s", "--sort", dest="sort", action="store", default=-1, type=int, help="sort for size: -1=descending, 1=ascending, 0=no sort. default:-1")    
     options, args = parser.parse_args()
     
     try:
@@ -191,6 +222,6 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     g = Generator()
-    g.set_verbose(options.verbose)
+    g.set_options(options)
     g.collect(infolder)
-    g.create(options.texture_size, outfolder)
+    g.create(outfolder)
