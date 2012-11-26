@@ -87,15 +87,33 @@ class Node(object):
         
         return self.children[0].insert(size)
 
-    def render(self, image):
+    def render(self, image, padding, fill=True):
         if self.texture:
             thisimage = Image.open(self.texture)
-            size = thisimage.size
-            image.paste(thisimage, (self.rect.x, self.rect.y))
+            w,h = thisimage.size            
+            image.paste(thisimage, (self.rect.x+padding, self.rect.y+padding))
+            
+            if fill:
+                top = thisimage.crop((0,0,w,1))
+                top = top.resize((w,padding))
+                image.paste(top, (self.rect.x+padding,self.rect.y))
+                
+                bottom = thisimage.crop((0,h-1,w,h))
+                bottom = bottom.resize((w,padding))
+                image.paste(bottom, (self.rect.x+padding,self.rect.y+self.rect.h-padding))
+
+                left = thisimage.crop((0,0,1,h))
+                left = left.resize((padding,h))
+                image.paste(left, (self.rect.x,self.rect.y+padding))
+
+                right = thisimage.crop((w-1,0,w,h))
+                right = right.resize((padding,h))
+                image.paste(right, (self.rect.x+self.rect.w-padding,self.rect.y+padding))
+
         
         if self.children:
-            self.children[0].render(image)
-            self.children[1].render(image)
+            self.children[0].render(image, padding, fill)
+            self.children[1].render(image, padding, fill)
         
         
     
@@ -162,6 +180,7 @@ class Generator(object):
                 print "pass:",atlas_number
                 for imagepath in images_scheduled:
                     size = self._texture_info[imagepath]["size"]
+                    size = [size[0]+self._padding*2, size[1]+self._padding*2]
                     node = _root.insert(size)
                     if node:
                         node.texture = imagepath                     
@@ -176,7 +195,7 @@ class Generator(object):
                     break
                                                 
                 image = Image.new("RGBA", (texSize, texSize))
-                _root.render(image)
+                _root.render(image, self._padding, self._fill)
                 
                 try:    os.makedirs(os.path.dirname(outpath))
                 except: pass
@@ -204,6 +223,8 @@ class Generator(object):
         self._flatten_output = options.flat
         self._group_by_folder = options.group_by_folder
         self._sort = options.sort
+        self._padding = options.padding
+        self._fill = options.fill
 
 if __name__ == '__main__':
     import optparse
@@ -213,6 +234,8 @@ if __name__ == '__main__':
     parser.add_option("-g", "--group_by_folder", dest="group_by_folder", action="store_true", default=False, help="if specified, create texture atlases per folder. output will also get flattened.")    
     parser.add_option("-f", "--flat", dest="flat", action="store_true", default=False, help="if specified, the folder structure will NOT be re-created in the output folder.")    
     parser.add_option("-s", "--sort", dest="sort", action="store", default=-1, type=int, help="sort for size: -1=descending, 1=ascending, 0=no sort. default:-1")    
+    parser.add_option("-p", "--padding", dest="padding", action="store", default=0, type=int, help="padding for each sub texture.")    
+    parser.add_option("", "--fill", dest="fill", action="store_true", default=False, help="if set, fill padded areas with border of sub texture to reduce texturing artifacts (seams)")    
     options, args = parser.parse_args()
     
     try:
