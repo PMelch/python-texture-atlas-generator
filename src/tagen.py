@@ -91,24 +91,53 @@ class Node(object):
         if self.texture:
             thisimage = Image.open(self.texture)
             w,h = thisimage.size            
-            image.paste(thisimage, (self.rect.x+padding, self.rect.y+padding))
+            rx = self.rect.x
+            ry = self.rect.y
+            rh = self.rect.h
+            rw = self.rect.w
+            image.paste(thisimage, (rx+padding, ry+padding))
             
             if fill:
-                top = thisimage.crop((0,0,w,1))
-                top = top.resize((w,padding))
-                image.paste(top, (self.rect.x+padding,self.rect.y))
+                #top
+                part = thisimage.crop((0,0,w,1))
+                part = part.resize((w,padding))
+                image.paste(part, (rx+padding,ry))
+
+                #topleft
+                part = thisimage.crop((0,0,1,1))
+                part = part.resize((padding,padding))
+                image.paste(part, (rx,ry))
+
+                #topright
+                part = thisimage.crop((w-1,0,w,1))
+                part = part.resize((padding,padding))
+                image.paste(part, (rx+rw-padding,ry))
+
+                #bottom
+                part = thisimage.crop((0,h-1,w,h))
+                part = part.resize((w,padding))
+                image.paste(part, (rx+padding,ry+rh-padding))
+
+                #left
+                part = thisimage.crop((0,0,1,h))
+                part = part.resize((padding,h))
+                image.paste(part, (rx,ry+padding))
+
+                #bottomleft
+                part = thisimage.crop((0,h-1,1,h))
+                part = part.resize((padding,padding))
+                image.paste(part, (rx,ry+rh-padding))
+
+                #bottomright
+                part = thisimage.crop((w-1,h-1,w,h))
+                part = part.resize((padding,padding))
+                image.paste(part, (rx+rw-padding,ry+rh-padding))
                 
-                bottom = thisimage.crop((0,h-1,w,h))
-                bottom = bottom.resize((w,padding))
-                image.paste(bottom, (self.rect.x+padding,self.rect.y+self.rect.h-padding))
+                #right
+                part = thisimage.crop((w-1,0,w,h))
+                part = part.resize((padding,h))
+                image.paste(part, (rx+rw-padding,ry+padding))
 
-                left = thisimage.crop((0,0,1,h))
-                left = left.resize((padding,h))
-                image.paste(left, (self.rect.x,self.rect.y+padding))
-
-                right = thisimage.crop((w-1,0,w,h))
-                right = right.resize((padding,h))
-                image.paste(right, (self.rect.x+self.rect.w-padding,self.rect.y+padding))
 
         
         if self.children:
