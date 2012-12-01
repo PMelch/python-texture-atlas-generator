@@ -43,55 +43,61 @@ class Rect(object):
             1 if the rect is bigger than the rect of the given size
         '''
         
-        if (self.w==size[0] and self.h==size[1] ):# or \
-            #(self.w==size[1] and self.h==size[0] ):
-            return 0
-        if (self.w>=size[0] and self.h>=size[1] ):# or \
-        #    (self.w>=size[1] and self.h>=size[0] ):
-            return 1
-        return -1
+        if self.w==size[0] and self.h==size[1]:
+            return 0,False
+        if self.w==size[1] and self.h==size[0]:
+            return 0,True
+        if self.w>=size[0] and self.h>=size[1]:
+            return 1,False
+        if self.w>=size[1] and self.h>=size[0]:
+            return 1,True
+        return -1,False
 
 class Node(object):
     def __init__(self, x,y,w,h):
         self.children = None
         self.rect = Rect(x,y,w,h)
         self.texture = None
+        self.rotated = False
 
     
     def insert(self, size):
         # are we a branch?
         if self.children:
-            newnode = self.children[0].insert(size)
+            newnode, rotated = self.children[0].insert(size)
             if newnode:
-                return newnode
+                return newnode, rotated
             return self.children[1].insert(size)
         
         # already texture there?
         if self.texture:
-            return None
+            return None, False
 
         # this node too small?
-        status = self.rect.compare(size)
+        status, rotated = self.rect.compare(size)
         if status < 0:
             # too small
-            return None
+            return None, False
         
         if status == 0:
             # matches exactly
-            return self
+            return self, rotated
         
         # rect is bigger. so lets split it        
         
-        dw = self.rect.w - size[0]
-        dh = self.rect.h - size[1]
+        imgw = (size[1] if rotated else size[0])
+        imgh = (size[0] if rotated else size[1])
+        
+        dw = self.rect.w - imgw
+        dh = self.rect.h - imgh
         
         r = self.rect
         if dw > dh:
-            self.children = [Node(r.x, r.y, size[0], r.h), \
-                             Node(r.x+size[0], r.y, r.w-size[0], r.h)]
+            self.children = [Node(r.x, r.y, imgw, r.h), \
+                             Node(r.x+imgw, r.y, r.w-imgw, r.h)]
         else:
-            self.children = [Node(r.x, r.y, r.w, size[1]), \
-                             Node(r.x, r.y+size[1], r.w, r.h-size[1])]
+            self.children = [Node(r.x, r.y, r.w, imgh), \
+                             Node(r.x, r.y+imgh, r.w, r.h-imgh)]
         
         return self.children[0].insert(size)
 
@@ -100,6 +106,8 @@ class Node(object):
         
         if self.texture:
             thisimage = Image.open(self.texture)
+            if self.rotated:
+                thisimage = thisimage.rotate(90)
             w,h = thisimage.size            
             rx = self.rect.x
             ry = self.rect.y
@@ -260,11 +268,12 @@ class Generator(object):
                 for imagepath in images_scheduled:
                     size = self._texture_info[imagepath]["size"]
                     size = [size[0]+self._padding*2, size[1]+self._padding*2]
-                    node = _root.insert(size)
+                    node, rotated = _root.insert(size)
                     if node:
-                        node.texture = imagepath                     
+                        node.texture = imagepath
+                        node.rotated = rotated                     
                         self._texture_info[imagepath]["atlas"] = outpath
-                        self._atlas_info[outpath][imagepath] = dict(rect=node.rect)
+                        self._atlas_info[outpath][imagepath] = dict(rect=node.rect, rotated=rotated)
                     else:
                         next_scheduled.append(imagepath)
                         
@@ -292,10 +301,11 @@ class Generator(object):
             outfile.write("path;x1;y1;x2;y2\n")
             for path, entry in info.items():
                 rect = entry["rect"]
+                rotated = entry["rotated"]
                 x,y,w,h = rect.x, rect.y, rect.w, rect.h
                 outfile.write(path)
                 outfile.write(";")
-                outfile.write("%d;%d;%d;%d;"%(x,y,x+w-1,y+h-1))
+                outfile.write("%d;%d;%d;%d;%s"%(x,y,x+w-1,y+h-1, rotated))
                 outfile.write("\n")
 
 
