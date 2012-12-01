@@ -35,7 +35,7 @@ class Rect(object):
         self.w = w
         self.h = h
         
-    def compare(self, size):
+    def compare(self, size, allow_rotation):
         '''
         returns
             -1 if the rect is smaller than the rect of the given size
@@ -45,11 +45,11 @@ class Rect(object):
         
         if self.w==size[0] and self.h==size[1]:
             return 0,False
-        if self.w==size[1] and self.h==size[0]:
+        if allow_rotation and self.w==size[1] and self.h==size[0]:
             return 0,True
         if self.w>=size[0] and self.h>=size[1]:
             return 1,False
-        if self.w>=size[1] and self.h>=size[0]:
+        if allow_rotation and self.w>=size[1] and self.h>=size[0]:
             return 1,True
         return -1,False
 
@@ -61,20 +61,20 @@ class Node(object):
         self.rotated = False
 
     
-    def insert(self, size):
+    def insert(self, size, allow_rotation):
         # are we a branch?
         if self.children:
-            newnode, rotated = self.children[0].insert(size)
+            newnode, rotated = self.children[0].insert(size, allow_rotation)
             if newnode:
                 return newnode, rotated
-            return self.children[1].insert(size)
+            return self.children[1].insert(size, allow_rotation)
         
         # already texture there?
         if self.texture:
             return None, False
 
         # this node too small?
-        status, rotated = self.rect.compare(size)
+        status, rotated = self.rect.compare(size, allow_rotation)
         if status < 0:
             # too small
             return None, False
@@ -99,7 +99,7 @@ class Node(object):
             self.children = [Node(r.x, r.y, r.w, imgh), \
                              Node(r.x, r.y+imgh, r.w, r.h-imgh)]
         
-        return self.children[0].insert(size)
+        return self.children[0].insert(size, allow_rotation)
 
     def render(self, image, padding, fill=True):
         maxx, maxy = 0,0
@@ -285,7 +285,7 @@ class Generator(object):
                     for imagepath in images_scheduled:
                         size = self._texture_info[imagepath]["size"]
                         size = [size[0]+self._padding*2, size[1]+self._padding*2]
-                        node, rotated = root.insert(size)
+                        node, rotated = root.insert(size, self._allow_rotation)
                         if node:
                             node.texture = imagepath
                             node.rotated = rotated                     
@@ -366,6 +366,7 @@ class Generator(object):
         self._po2 = options.power_of_two
         self._crop = options.crop
         self._info_format = options.info
+        self._allow_rotation = not options.no_rotation
 
 if __name__ == '__main__':
     import optparse
@@ -381,7 +382,7 @@ if __name__ == '__main__':
     parser.add_option("-2", "--power_of_2", dest="power_of_two", action="store_true", default=False, help="output of a power of two texture is enforced")    
     parser.add_option("-o", "--optimize", dest="optimize", action="store_true", default=False, help="if specified, atlases with a lot of empty space will be re-generated using smaller dimensions")
     parser.add_option("-i", "--info", dest="info", action="store", default="csv", help="output format of the info file (xml, json, csv). default: csv")
-    parser.add_option("-n", "--no_rotation", dest="no_rotation", action="store_true", default="csv", help="output format of the info file (xml, json, csv). default: csv")
+    parser.add_option("-n", "--no_rotation", dest="no_rotation", action="store_true", default=False, help="output format of the info file (xml, json, csv). default: csv")
     options, args = parser.parse_args()
     
     try:
