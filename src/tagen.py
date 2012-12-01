@@ -168,7 +168,15 @@ class Node(object):
             
         return maxx, maxy
         
-            
+    def calc_area(self):
+        area = 0
+        if self.texture:
+            area += self.rect.w * self.rect.h
+        if self.children:
+            area += self.children[0].calc_area()        
+            area += self.children[1].calc_area()
+        return area
+
         
 
 class Generator(object):
@@ -261,21 +269,52 @@ class Generator(object):
                     
                 self._atlas_info[outpath] = dict()
                 
-                _root = Node(0,0,texSize, texSize)
-                next_scheduled = []
-                print "group",group
-                print "pass:",atlas_number
-                for imagepath in images_scheduled:
-                    size = self._texture_info[imagepath]["size"]
-                    size = [size[0]+self._padding*2, size[1]+self._padding*2]
-                    node, rotated = _root.insert(size)
-                    if node:
-                        node.texture = imagepath
-                        node.rotated = rotated                     
-                        self._texture_info[imagepath]["atlas"] = outpath
-                        self._atlas_info[outpath][imagepath] = dict(rect=node.rect, rotated=rotated)
+                texWidth = texSize
+                texHeight = texSize
+
+                last_root = None                
+                while True:
+                    root = Node(0,0,texWidth, texHeight)
+                    next_scheduled = []
+                    print "group",group
+                    print "pass:",atlas_number
+                    print "creating tex %dx%d"%(texWidth, texHeight)
+                    for imagepath in images_scheduled:
+                        size = self._texture_info[imagepath]["size"]
+                        size = [size[0]+self._padding*2, size[1]+self._padding*2]
+                        node, rotated = root.insert(size)
+                        if node:
+                            node.texture = imagepath
+                            node.rotated = rotated                     
+                            self._texture_info[imagepath]["atlas"] = outpath
+                            self._atlas_info[outpath][imagepath] = dict(rect=node.rect, rotated=rotated)
+                        else:
+                            next_scheduled.append(imagepath)
+                        
+                    used_area = root.calc_area()
+                    total_area = texWidth*texHeight
+                    
+                    print "coverage = %d%%"%int(100*used_area/total_area)
+                    if not self._optimize or used_area==0 or used_area > total_area*0.5:
+                        break
+                    
+                    if texWidth == texHeight:
+                        texHeight /= 2
                     else:
-                        next_scheduled.append(imagepath)
+                        texWidth /= 2
+                        
+                    if texWidth == 1 or texHeight == 1:
+                        print "aborting optimization. taking original"
+                        root = last_root
+                        break
+                    
+                    if last_root is None:
+                        last_root = root
+                    
+                    
+                        
+                
+                
                         
                 if images_scheduled == next_scheduled:
                     # all the following images are too big to fit on a single texture with the given max size
@@ -283,8 +322,8 @@ class Generator(object):
                         print "cannot fit in",imagepath
                     break
                                                 
-                image = Image.new("RGBA", (texSize, texSize))
-                maxx, maxy = _root.render(image, self._padding, self._fill)
+                image = Image.new("RGBA", (texWidth, texHeight))
+                maxx, maxy = root.render(image, self._padding, self._fill)
                 image = self._post_process(image, maxx, maxy)
                 
                 try:    os.makedirs(os.path.dirname(outpath))
