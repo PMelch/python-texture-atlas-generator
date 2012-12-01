@@ -24,6 +24,7 @@ Copyright 2012 Peter Melchart
 import os
 import sys
 import Image
+import math
 
 class Rect(object):
     x,y,w,h=0,0,0,0
@@ -34,18 +35,21 @@ class Rect(object):
         self.w = w
         self.h = h
         
-    def matches(self, size):
+    def compare(self, size):
+        '''
+        returns
+            -1 if the rect is smaller than the rect of the given size
+            0 if the rect matches exactly the rect of the given size
+            1 if the rect is bigger than the rect of the given size
+        '''
+        
         if (self.w==size[0] and self.h==size[1] ):# or \
             #(self.w==size[1] and self.h==size[0] ):
-            return True
-        return False
-        
-        
-    def can_contain(self, size):
+            return 0
         if (self.w>=size[0] and self.h>=size[1] ):# or \
         #    (self.w>=size[1] and self.h>=size[0] ):
-            return True
-        return False
+            return 1
+        return -1
 
 class Node(object):
     def __init__(self, x,y,w,h):
@@ -67,12 +71,16 @@ class Node(object):
             return None
 
         # this node too small?
-        if not self.rect.can_contain(size):
+        status = self.rect.compare(size)
+        if status < 0:
+            # too small
             return None
         
-        if self.rect.matches(size):
+        if status == 0:
+            # matches exactly
             return self
         
+        # rect is bigger. so lets split it        
         
         dw = self.rect.w - size[0]
         dh = self.rect.h - size[1]
@@ -88,6 +96,8 @@ class Node(object):
         return self.children[0].insert(size)
 
     def render(self, image, padding, fill=True):
+        maxx, maxy = 0,0
+        
         if self.texture:
             thisimage = Image.open(self.texture)
             w,h = thisimage.size            
@@ -96,6 +106,9 @@ class Node(object):
             rh = self.rect.h
             rw = self.rect.w
             image.paste(thisimage, (rx+padding, ry+padding))
+            
+            maxx += rx+rw
+            maxy += ry+rh
             
             if fill:
                 #top
@@ -138,15 +151,17 @@ class Node(object):
                 part = part.resize((padding,h))
                 image.paste(part, (rx+rw-padding,ry+padding))
 
-
         
         if self.children:
-            self.children[0].render(image, padding, fill)
-            self.children[1].render(image, padding, fill)
+            x1, y1 = self.children[0].render(image, padding, fill)
+            x2, y2 = self.children[1].render(image, padding, fill)
+            maxx = max(maxx, x1, x2)
+            maxy = max(maxy, y1, y2)
+            
+        return maxx, maxy
         
+            
         
-    
-    
 
 class Generator(object):
     IMAGE_TYPES = [".png", ".jpg", ".jpeg"]
@@ -183,6 +198,41 @@ class Generator(object):
         val2 = size2[0]*size2[1]
         return cmp(val1,val2) if self._sort==1 else cmp(val2,val1)
             
+
+    def log2(self, d):
+        return math.log(d)/math.log(2)
+    
+    def _is_po2(self, d):
+        return ((math.log(d)/math.log(2))%1.0)==0
+
+    def _post_process(self, image, maxx, maxy):
+        '''
+        crop the image if wanted and enforce power-of-2-ness if wanted
+        
+        '''
+        
+        w, h = image.size
+        w2, h2 = self._is_po2(w), self._is_po2(h)
+        # if image is already power of two and no cropping os requested, just return passed image
+        if not self._crop and w2 and h2:
+            return image
+        
+        next_po2_width = int(2**(math.ceil(self.log2(maxx))))
+        next_po2_height = int(2**(math.ceil(self.log2(maxy))))
+        
+        new_width = next_po2_width if self._po2 else maxx
+        new_height = next_po2_height if self._po2 else maxy
+        
+        newimage = Image.new(image.mode, (new_width, new_height))
+        image = image.crop((0,0,maxx, maxy))
+        newimage.paste(image, (0,0))
+        return newimage
+            
+        
+        
+        
+    
+    
     def create(self, outfolder):
         texSize = self._texture_size
         
@@ -219,12 +269,14 @@ class Generator(object):
                         next_scheduled.append(imagepath)
                         
                 if images_scheduled == next_scheduled:
+                    # all the following images are too big to fit on a single texture with the given max size
                     for imagepath in images_scheduled:
                         print "cannot fit in",imagepath
                     break
                                                 
                 image = Image.new("RGBA", (texSize, texSize))
-                _root.render(image, self._padding, self._fill)
+                maxx, maxy = _root.render(image, self._padding, self._fill)
+                image = self._post_process(image, maxx, maxy)
                 
                 try:    os.makedirs(os.path.dirname(outpath))
                 except: pass
@@ -235,13 +287,15 @@ class Generator(object):
                 images_scheduled = next_scheduled
                 atlas_number += 1
                 
-    def write_info_file(self, info, outpath):
+    def write_info_file(self, info, outpath):        
         with open(outpath, "wt") as outfile:
+            outfile.write("path;x1;y1;x2;y2\n")
             for path, entry in info.items():
+                rect = entry["rect"]
+                x,y,w,h = rect.x, rect.y, rect.w, rect.h
                 outfile.write(path)
                 outfile.write(";")
-                rect = entry["rect"]
-                outfile.write("%d;%d;%d;%d;"%(rect.x, rect.y, rect.w, rect.h))
+                outfile.write("%d;%d;%d;%d;"%(x,y,x+w-1,y+h-1))
                 outfile.write("\n")
 
 
@@ -254,6 +308,10 @@ class Generator(object):
         self._sort = options.sort
         self._padding = options.padding
         self._fill = options.fill
+        self._optimize = options.optimize
+        self._po2 = options.power_of_two
+        self._crop = options.crop
+        self._info_format = options.info
 
 if __name__ == '__main__':
     import optparse
@@ -264,7 +322,12 @@ if __name__ == '__main__':
     parser.add_option("-f", "--flat", dest="flat", action="store_true", default=False, help="if specified, the folder structure will NOT be re-created in the output folder.")    
     parser.add_option("-s", "--sort", dest="sort", action="store", default=-1, type=int, help="sort for size: -1=descending, 1=ascending, 0=no sort. default:-1")    
     parser.add_option("-p", "--padding", dest="padding", action="store", default=0, type=int, help="padding for each sub texture.")    
-    parser.add_option("", "--fill", dest="fill", action="store_true", default=False, help="if set, fill padded areas with border of sub texture to reduce texturing artifacts (seams)")    
+    parser.add_option("", "--fill", dest="fill", action="store_true", default=False, help="if set, fill padded areas with border of sub texture to reduce texturing artifacts (seams)")
+    parser.add_option("-c", "--crop", dest="crop", action="store_true", default=False, help="if set, any overhead on the texture will be cropped ( will result in non-PO2 textures unless --power_of_two is set")    
+    parser.add_option("-2", "--power_of_2", dest="power_of_two", action="store_true", default=False, help="output of a power of two texture is enforced")    
+    parser.add_option("-o", "--optimize", dest="optimize", action="store_true", default=False, help="if specified, atlases with a lot of empty space will be re-generated using smaller dimensions")
+    parser.add_option("-i", "--info", dest="info", action="store", default="csv", help="output format of the info file (xml, json, csv). default: csv")
+    parser.add_option("-n", "--no_rotation", dest="no_rotation", action="store_true", default="csv", help="output format of the info file (xml, json, csv). default: csv")
     options, args = parser.parse_args()
     
     try:
