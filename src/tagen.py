@@ -273,12 +273,15 @@ class Generator(object):
                 texHeight = texSize
 
                 last_root = None                
+                if self._verbose:
+                    if group and group!="":
+                        print "group",group
+                print "atlas #",atlas_number
                 while True:
                     root = Node(0,0,texWidth, texHeight)
                     next_scheduled = []
-                    print "group",group
-                    print "pass:",atlas_number
-                    print "creating tex %dx%d"%(texWidth, texHeight)
+                    if self._verbose:
+                        print "trying size %dx%d"%(texWidth, texHeight)
                     for imagepath in images_scheduled:
                         size = self._texture_info[imagepath]["size"]
                         size = [size[0]+self._padding*2, size[1]+self._padding*2]
@@ -294,7 +297,8 @@ class Generator(object):
                     used_area = root.calc_area()
                     total_area = texWidth*texHeight
                     
-                    print "coverage = %d%%"%int(100*used_area/total_area)
+                    if self._verbose:
+                        print "coverage = %d%%"%int(100*used_area/total_area)
                     if not self._optimize or used_area==0 or used_area > total_area*0.5:
                         break
                     
@@ -304,7 +308,8 @@ class Generator(object):
                         texWidth /= 2
                         
                     if texWidth == 1 or texHeight == 1:
-                        print "aborting optimization. taking original"
+                        if self._verbose:
+                            print "aborting optimization. taking original"
                         root = last_root
                         break
                     
