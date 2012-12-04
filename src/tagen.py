@@ -181,6 +181,9 @@ class Node(object):
 
 class Generator(object):
     IMAGE_TYPES = [".png", ".jpg", ".jpeg"]
+    INFO_CSV = "csv"
+    INFO_XML = "xml"
+    INFO_JSON = "json"
 
 
     def __init__(self):
@@ -340,17 +343,62 @@ class Generator(object):
                 images_scheduled = next_scheduled
                 atlas_number += 1
                 
-    def write_info_file(self, info, outpath):        
+
+    def _write_csv_info_file(self, info, outpath):
         with open(outpath, "wt") as outfile:
             outfile.write("path;x1;y1;x2;y2\n")
             for path, entry in info.items():
                 rect = entry["rect"]
                 rotated = entry["rotated"]
-                x,y,w,h = rect.x, rect.y, rect.w, rect.h
+                x, y, w, h = rect.x, rect.y, rect.w, rect.h
                 outfile.write(path)
                 outfile.write(";")
-                outfile.write("%d;%d;%d;%d;%s"%(x,y,x+w-1,y+h-1, rotated))
+                outfile.write("%d;%d;%d;%d;%s" % (x, y, x + w - 1, y + h - 1, rotated))
                 outfile.write("\n")
+
+    def _write_xml_info_file(self, info, outpath):
+        with open(outpath, "wt") as outfile:
+            outfile.write("""<?xml version="1.0" encoding="utf-8"?>\n""")
+            outfile.write("<textures>\n")
+            for path, entry in info.items():
+                rect = entry["rect"]
+                rotated = entry["rotated"]
+                x, y, w, h = rect.x, rect.y, rect.w, rect.h
+                outfile.write("  <texture \n")
+                outfile.write("""       path="%s"\n"""%path)
+                outfile.write("""       x="%d"\n"""%x)
+                outfile.write("""       x="%d"\n"""%y)
+                outfile.write("""       x="%d"\n"""%(x+w-1))
+                outfile.write("""       x="%d"\n"""%(y+h-1))
+                outfile.write("""       rotated="%s" />\n"""%rotated)
+            outfile.write("</texture>\n")
+
+    def _write_json_info_file(self, info, outpath):
+#        with open(outpath, "wt") as outfile:
+#            outfile.write("textures>\n")
+#            for path, entry in info.items():
+#                rect = entry["rect"]
+#                rotated = entry["rotated"]
+#                x, y, w, h = rect.x, rect.y, rect.w, rect.h
+#                outfile.write("  <texture \n")
+#                outfile.write("""       path="%s"\n"""%path)
+#                outfile.write("""       x="%d"\n"""%x)
+#                outfile.write("""       x="%d"\n"""%y)
+#                outfile.write("""       x="%d"\n"""%(x+w-1))
+#                outfile.write("""       x="%d"\n"""%(y+h-1))
+#                outfile.write("""       rotated="%s" />\n"""%rotated)
+#            outfile.write("</texture>\n")
+        pass
+
+    def write_info_file(self, info, outpath):
+        if self._info_format == Generator.INFO_CSV:        
+            self._write_csv_info_file(info, outpath)
+        elif self._info_format == Generator.INFO_XML:        
+            self._write_xml_info_file(info, outpath)
+        elif self._info_format == Generator.INFO_JSON:        
+            self._write_json_info_file(info, outpath)
+        else:
+            raise ValueError("illegal info format:",self._info_format)
 
 
     def set_options(self, options):
