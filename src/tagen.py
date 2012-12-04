@@ -25,6 +25,8 @@ import os
 import sys
 import Image
 import math
+import json
+from xml.dom.minidom import getDOMImplementation
 
 class Rect(object):
     x,y,w,h=0,0,0,0
@@ -357,38 +359,36 @@ class Generator(object):
                 outfile.write("\n")
 
     def _write_xml_info_file(self, info, outpath):
+        impl = getDOMImplementation()
+        newdoc = impl.createDocument(None, "textures", None)
+        top_element = newdoc.documentElement
+        
         with open(outpath, "wt") as outfile:
-            outfile.write("""<?xml version="1.0" encoding="utf-8"?>\n""")
-            outfile.write("<textures>\n")
             for path, entry in info.items():
                 rect = entry["rect"]
                 rotated = entry["rotated"]
                 x, y, w, h = rect.x, rect.y, rect.w, rect.h
-                outfile.write("  <texture \n")
-                outfile.write("""       path="%s"\n"""%path)
-                outfile.write("""       x="%d"\n"""%x)
-                outfile.write("""       x="%d"\n"""%y)
-                outfile.write("""       x="%d"\n"""%(x+w-1))
-                outfile.write("""       x="%d"\n"""%(y+h-1))
-                outfile.write("""       rotated="%s" />\n"""%rotated)
-            outfile.write("</texture>\n")
+                
+                node = newdoc.createElement("texture")
+                node.setAttribute("path", path)
+                node.setAttribute("x1",str(x))
+                node.setAttribute("y1",str(y))
+                node.setAttribute("x2",str(x+w-1))
+                node.setAttribute("y2",str(y+h-1))
+                node.setAttribute("rotated", str(rotated))
+                top_element.appendChild(node)
+
+            outfile.write(newdoc.toprettyxml())
 
     def _write_json_info_file(self, info, outpath):
-#        with open(outpath, "wt") as outfile:
-#            outfile.write("textures>\n")
-#            for path, entry in info.items():
-#                rect = entry["rect"]
-#                rotated = entry["rotated"]
-#                x, y, w, h = rect.x, rect.y, rect.w, rect.h
-#                outfile.write("  <texture \n")
-#                outfile.write("""       path="%s"\n"""%path)
-#                outfile.write("""       x="%d"\n"""%x)
-#                outfile.write("""       x="%d"\n"""%y)
-#                outfile.write("""       x="%d"\n"""%(x+w-1))
-#                outfile.write("""       x="%d"\n"""%(y+h-1))
-#                outfile.write("""       rotated="%s" />\n"""%rotated)
-#            outfile.write("</texture>\n")
-        pass
+        with open(outpath, "wt") as outfile:
+            o = []
+            for path, entry in info.items():
+                rect = entry["rect"]
+                rotated = entry["rotated"]
+                x, y, w, h = rect.x, rect.y, rect.w, rect.h
+                o.append(dict(path=path,x1=x,y1=y,x2=x+w-1,y2=y+h-1,rotated=rotated))
+            outfile.write(json.dumps(o, indent=4))
 
     def write_info_file(self, info, outpath):
         if self._info_format == Generator.INFO_CSV:        
