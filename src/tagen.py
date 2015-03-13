@@ -348,7 +348,7 @@ class Generator(object):
 
     def _write_csv_info_file(self, info, outpath):
         with open(outpath, "wt") as outfile:
-            outfile.write("path;x1;y1;x2;y2\n")
+            outfile.write("path;x1;y1;x2;y2;rotated\n")
             for path, entry in info.items():
                 rect = entry["rect"]
                 rotated = entry["rotated"]
